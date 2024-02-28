@@ -209,7 +209,7 @@ export class InviteManager extends EventEmitter {
         switch (action) {
             case 'add':
                 // check if is a bonus invite
-                if (type === 'bonus') {
+                if (type === InviteType.bonus) {
                     // add to bonus
                     invitesUsers[type] += 1;
                     break;
@@ -220,7 +220,7 @@ export class InviteManager extends EventEmitter {
                 }
             case 'remove':
                 // check if is a bonus invite
-                if (type === 'bonus') {
+                if (type === InviteType.bonus) {
                     // remove from bonus
                     invitesUsers[type] -= 1;
                     break;
@@ -232,7 +232,7 @@ export class InviteManager extends EventEmitter {
                     break;
                 }
             case 'move':
-                if(type === 'bonus') return invitesUsers;
+                if(type === InviteType.bonus) return invitesUsers;
                 // remove from other types
                 for (const key in invitesUsers) {
                     if (key === type) continue;
@@ -304,6 +304,14 @@ export class InviteManager extends EventEmitter {
         }
         
         return newMember;
+    }
+
+    public async addBonusInvite(member: GuildMember, number: number): Promise<IInvites> {
+        return this.addInvites(member, { bonus: number } as IInvites);
+    }
+
+    public async removeBonusInvite(member: GuildMember, number: number): Promise<IInvites> {
+        return this.addInvites(member, { bonus: -number } as IInvites);
     }
 
 }

@@ -37,4 +37,4 @@ type ExtendedGuildMember = GuildMember & {
     invitedBy: 'vanity' | User | 'unknown';
 }
 
-export { InviteType, IInvites, IInvitesNumber, ExtendedGuildMember, inviterType };
+export { InviteType, IInvites, IInvitesNumber, ExtendedGuildMember, inviterType, InvitesTracker };
