@@ -20,6 +20,10 @@
   ],
   "author": "Alexmdz77",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Alexmdz77/discord-invites-manager.git"
+  },
   "dependencies": {
     "discord.js": "^14.7.1",
     "quick.db": "^9.0.8"
