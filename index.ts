@@ -55,7 +55,7 @@ export class InviteManager extends EventEmitter {
     // compare invites 
     private async compareInvites(before: Collection<string, number>, after: Collection<string, number>): Promise<User | undefined> {
         for (const inviter in after) {
-            if (after.get(inviter) - before.get(inviter) === 1) {
+            if (after.get(inviter)! - before.get(inviter)! === 1) {
                 return this.client.users.fetch(inviter);
             }
         }
@@ -70,7 +70,7 @@ export class InviteManager extends EventEmitter {
         const guild = member.guild;
         let newMember = member as ExtendedGuildMember;
 
-        const invitesBefore = this.globalInvites.get(guild.id);
+        const invitesBefore = this.globalInvites.get(guild.id) || new Collection<string, number>();
         const invitesAfter = await this.fetchInvites(guild);
 
         // compare invitesBefore and invitesAfter and return inviter id
@@ -131,7 +131,7 @@ export class InviteManager extends EventEmitter {
         // foreach invites add author id and uses to guildInviteCount
         invites.forEach((invite) => {
             const { inviter, uses } = invite;
-            if(inviter) guildInviteCount.set(inviter.id, (guildInviteCount.get(inviter.id) || 0) + uses);
+            if(inviter) guildInviteCount.set(inviter.id, (guildInviteCount.get(inviter.id) || 0) + (uses || 0));
         });
         return guildInviteCount;
     }
