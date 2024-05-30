@@ -41,7 +41,7 @@ export class InviteManager extends EventEmitter {
         this.client.on('ready', async () => {
             for (const [id, guild] of this.client.guilds.cache) {
                 // fetch invites and set to globalInvites
-                this.globalInvites[guild.id] = await this.fetchInvites(guild);
+                this.globalInvites.set(guild.id, await this.fetchInvites(guild))
                 // fetch vanity invites and set to vanityInvites
                 this.vanityInvites = await guild.fetchVanityData() ? (await guild.fetchVanityData()).uses : 0;
             }
@@ -55,7 +55,7 @@ export class InviteManager extends EventEmitter {
     // compare invites 
     private async compareInvites(before: Collection<string, number>, after: Collection<string, number>): Promise<User | undefined> {
         for (const inviter in after) {
-            if (after[inviter] - before[inviter] === 1) {
+            if (after.get(inviter) - before.get(inviter) === 1) {
                 return this.client.users.fetch(inviter);
             }
         }
@@ -70,7 +70,7 @@ export class InviteManager extends EventEmitter {
         const guild = member.guild;
         let newMember = member as ExtendedGuildMember;
 
-        const invitesBefore = this.globalInvites[guild.id];
+        const invitesBefore = this.globalInvites.get(guild.id);
         const invitesAfter = await this.fetchInvites(guild);
 
         // compare invitesBefore and invitesAfter and return inviter id
@@ -97,7 +97,7 @@ export class InviteManager extends EventEmitter {
         }
 
         // set globalInvites to invitesAfter
-        this.globalInvites[guild.id] = invitesAfter;
+        this.globalInvites.set(guild.id, invitesAfter);
 
         // get invites and invitesUsers
         newMember.invites = await this.getInvites(member);
@@ -131,7 +131,7 @@ export class InviteManager extends EventEmitter {
         // foreach invites add author id and uses to guildInviteCount
         invites.forEach((invite) => {
             const { inviter, uses } = invite;
-            if(inviter) guildInviteCount[inviter.id] = (guildInviteCount[inviter.id] || 0) + uses;
+            if(inviter) guildInviteCount.set(inviter.id, (guildInviteCount.get(inviter.id) || 0) + uses);
         });
         return guildInviteCount;
     }
@@ -232,13 +232,16 @@ export class InviteManager extends EventEmitter {
                     break;
                 }
             case 'move':
-                if(type === InviteType.bonus) return invitesUsers;
+                if (type === InviteType.bonus) return invitesUsers;
                 // remove from other types
                 for (const key in invitesUsers) {
                     if (key === type) continue;
-                    const index = invitesUsers[key].indexOf(invite);
-                    if (index === -1) continue;
-                    invitesUsers[key].splice(index, 1);
+                    const invites = invitesUsers[key as keyof IInvites];
+                    if (Array.isArray(invites)) {
+                        const index = invites.indexOf(invite);
+                        if (index === -1) continue;
+                        invites.splice(index, 1);
+                    }
                 }
                 // add to type
                 invitesUsers[type].push(invite);
