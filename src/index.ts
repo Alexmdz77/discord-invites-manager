@@ -43,7 +43,11 @@ export class InviteManager extends EventEmitter {
                 // fetch invites and set to globalInvites
                 this.globalInvites.set(guildId, await this.fetchInvites(guild))
                 // fetch vanity invites and set to vanityInvites
-                this.vanityInvites = await guild.fetchVanityData() ? (await guild.fetchVanityData()).uses : 0;
+                try {
+                    this.vanityInvites = await guild.fetchVanityData() ? (await guild.fetchVanityData()).uses : 0;
+                } catch (error) {
+                    // error, the guild does not have vanity invite
+                }
             }
         });
 
