@@ -1,6 +1,6 @@
 {
   "name": "discord-invites-manager",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "The Discord Invites Manager is an npm module written in TypeScript. It is designed to facilitate the management and tracking of invites in a Discord bot using the Discord.js library. The module provides functionalities to track different types of invites, such as regular, bonus, fake, and leave, as well as vanity invites (custom URL invites).",
   "main": "dist/index.js",
   "homepage": "https://github.com/Alexmdz77/discord-invites-manager",
