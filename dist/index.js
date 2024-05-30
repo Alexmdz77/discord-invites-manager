@@ -1,90 +1,77 @@
-import { EventEmitter } from 'events';
-import { QuickDB } from 'quick.db';
-import { Client, Collection, Guild, GuildMember, PartialGuildMember, User } from 'discord.js';
-import { IInvites, InviteType, IInvitesNumber, ExtendedGuildMember, inviterType } from './types';
-
-const DefaultInvitesNumber: IInvitesNumber = {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.InviteManager = void 0;
+const events_1 = require("events");
+const quick_db_1 = require("quick.db");
+const discord_js_1 = require("discord.js");
+const types_1 = require("./types");
+const DefaultInvitesNumber = {
     regular: 0,
     bonus: 0,
     fake: 0,
     leave: 0,
     total: 0,
 };
-
-const DefaultInvites: IInvites = {
+const DefaultInvites = {
     regular: [],
     bonus: 0,
     fake: [],
     leave: [],
 };
-
-const db = new QuickDB({ filePath: 'invites.sqlite' });
-
-export class InviteManager extends EventEmitter {
-
-    client: Client<boolean>;
-    globalInvites: Collection<string, Collection<string, number>> = new Collection();
-    vanityInvites: number = 0;
-    prefix: string = 'invitemanager_';
-    fakeDays: number = 7;
-
-    constructor(client: Client, options?: { prefix?: string, fakeDays?: number }) {
+const db = new quick_db_1.QuickDB({ filePath: 'invites.sqlite' });
+class InviteManager extends events_1.EventEmitter {
+    constructor(client, options) {
         super();
-        if (!client) throw new Error('Pass the client in options.');
+        this.globalInvites = new discord_js_1.Collection();
+        this.vanityInvites = 0;
+        this.prefix = 'invitemanager_';
+        this.fakeDays = 7;
+        if (!client)
+            throw new Error('Pass the client in options.');
         this.client = client;
-
         // set options
-        this.prefix = options?.prefix || this.prefix;
-        this.fakeDays = options?.fakeDays || this.fakeDays;
-
+        this.prefix = (options === null || options === void 0 ? void 0 : options.prefix) || this.prefix;
+        this.fakeDays = (options === null || options === void 0 ? void 0 : options.fakeDays) || this.fakeDays;
         // on ready event fetch invites
         this.client.on('ready', async () => {
-            for (const [id, guild] of this.client.guilds.cache) {
+            for (const [guildId, guild] of this.client.guilds.cache) { // Access the 'id' property of the 'Guild' object
                 // fetch invites and set to globalInvites
-                this.globalInvites.set(guild.id, await this.fetchInvites(guild))
+                this.globalInvites.set(guildId, await this.fetchInvites(guild));
                 // fetch vanity invites and set to vanityInvites
                 this.vanityInvites = await guild.fetchVanityData() ? (await guild.fetchVanityData()).uses : 0;
             }
         });
-
-        this.client.on('guildMemberAdd', (member: GuildMember) => this.handleGuildMemberAdd(member));
-        this.client.on('guildMemberRemove', (member: GuildMember | PartialGuildMember) => this.handleGuildMemberRemove(member));
-
+        this.client.on('guildMemberAdd', (member) => this.handleGuildMemberAdd(member));
+        this.client.on('guildMemberRemove', (member) => this.handleGuildMemberRemove(member));
     }
-
     // compare invites 
-    private async compareInvites(before: Collection<string, number>, after: Collection<string, number>): Promise<User | undefined> {
+    async compareInvites(before, after) {
         for (const inviter in after) {
-            if (after.get(inviter)! - before.get(inviter)! === 1) {
+            if (after.get(inviter) - before.get(inviter) === 1) {
                 return this.client.users.fetch(inviter);
             }
         }
         return undefined;
     }
-
     // handle guildMemberAdd event
-    private async handleGuildMemberAdd(member: GuildMember): Promise<void> {
-        if (member.partial) return;
-
+    async handleGuildMemberAdd(member) {
+        if (member.partial)
+            return;
         // get guild
         const guild = member.guild;
-        let newMember = member as ExtendedGuildMember;
-
-        const invitesBefore = this.globalInvites.get(guild.id) || new Collection<string, number>();
+        let newMember = member;
+        const invitesBefore = this.globalInvites.get(guild.id) || new discord_js_1.Collection();
         const invitesAfter = await this.fetchInvites(guild);
-
         // compare invitesBefore and invitesAfter and return inviter id
         const inviter = await this.compareInvites(invitesBefore, invitesAfter);
-
         newMember.invites = DefaultInvitesNumber;
         newMember.invitesUsers = DefaultInvites;
         newMember.invitedBy = 'unknown';
-
         if (inviter) {
             // add invite to the user
             newMember = await this.addInvite(newMember, inviter);
-            
-        } else { // if invite not found, check vanity invite
+        }
+        else { // if invite not found, check vanity invite
             const vanityInviteBefore = this.vanityInvites;
             const vanityInviteAfter = await guild.fetchVanityData() ? (await guild.fetchVanityData()).uses : 0;
             // if vanity invite uses is greater than before, set invite to vanity invite
@@ -95,59 +82,49 @@ export class InviteManager extends EventEmitter {
                 this.vanityInvites = vanityInviteAfter;
             }
         }
-
         // set globalInvites to invitesAfter
         this.globalInvites.set(guild.id, invitesAfter);
-
         // get invites and invitesUsers
         newMember.invites = await this.getInvites(member);
         newMember.invitesUsers = await this.getInvitesUsers(member);
-
         this.emit('guildMemberAdd', newMember);
     }
-
-    private async handleGuildMemberRemove(member: GuildMember | PartialGuildMember): Promise<void> {
-        if (member.partial) return;
-
-        // get guild
-        const guild = member.guild;
-        let newMember = member as ExtendedGuildMember;
-
+    async handleGuildMemberRemove(member) {
+        if (member.partial)
+            return;
+        let newMember = member;
         // get invites and invitesUsers
         newMember.invites = await this.getInvites(newMember);
         newMember.invitesUsers = await this.getInvitesUsers(newMember);
-
         // remove leave invite from the user
         newMember = await this.removeInvite(newMember);
-
         this.emit('guildMemberRemove', newMember);
     }
-
     // fetch invites
-    private async fetchInvites(guild: Guild): Promise<Collection<string, number>> {
+    async fetchInvites(guild) {
         // fetch invites*
-        const invites = await guild.invites.fetch()
-        let guildInviteCount = {} as Collection<string, number>;
+        const invites = await guild.invites.fetch();
+        let guildInviteCount = {};
         // foreach invites add author id and uses to guildInviteCount
         invites.forEach((invite) => {
             const { inviter, uses } = invite;
-            if(inviter) guildInviteCount.set(inviter.id, (guildInviteCount.get(inviter.id) || 0) + (uses || 0));
+            if (inviter)
+                guildInviteCount.set(inviter.id, (guildInviteCount.get(inviter.id) || 0) + (uses || 0));
         });
         return guildInviteCount;
     }
-
     // get invites
-    protected async getInvites(member: GuildMember): Promise<IInvitesNumber> {
+    async getInvites(member) {
         // get invites
-        const invites = await db.get(`${this.prefix}invites_${member.guild.id}_${member.id}`) as IInvites;
+        const invites = await db.get(`${this.prefix}invites_${member.guild.id}_${member.id}`);
         // if not found, return default invites number
         if (!invites) {
-            const defaultInvites: IInvites = DefaultInvites;
+            const defaultInvites = DefaultInvites;
             await this.setInvites(member, defaultInvites);
             return DefaultInvitesNumber;
         }
         // set invites number and return
-        const invitesNumber: IInvitesNumber = {
+        const invitesNumber = {
             regular: invites.regular.length,
             bonus: invites.bonus,
             fake: invites.fake.length,
@@ -156,43 +133,39 @@ export class InviteManager extends EventEmitter {
         };
         return invitesNumber;
     }
-
     // get invites users
-    protected async getInvitesUsers(member: GuildMember): Promise<IInvites> {
+    async getInvitesUsers(member) {
         // get invites users
-        const invitesUsers = await db.get(`${this.prefix}invites_${member.guild.id}_${member.id}`) as IInvites;
+        const invitesUsers = await db.get(`${this.prefix}invites_${member.guild.id}_${member.id}`);
         // if not found, return default invites
         if (!invitesUsers) {
-            const defaultInvites: IInvites = DefaultInvites;
+            const defaultInvites = DefaultInvites;
             await this.setInvites(member, defaultInvites);
             return defaultInvites;
         }
-
         return invitesUsers;
     }
-
-    protected async setInvites(member: GuildMember, invitesUsers: IInvites): Promise<IInvites> {
+    async setInvites(member, invitesUsers) {
         return db.set(`${this.prefix}invites_${member.guild.id}_${member.id}`, invitesUsers);
     }
-
-    protected async getInvitedBy(member: ExtendedGuildMember): Promise<inviterType> {
-        const data = await db.get(`${this.prefix}invitedBy_${member.guild.id}_${member.id}`) as inviterType;
+    async getInvitedBy(member) {
+        const data = await db.get(`${this.prefix}invitedBy_${member.guild.id}_${member.id}`);
         if (data) {
-            if (data === 'vanity') return 'vanity';
-            if(data === 'unknown') return 'unknown';
+            if (data === 'vanity')
+                return 'vanity';
+            if (data === 'unknown')
+                return 'unknown';
             const user = this.client.users.cache.get(data.id);
             return user || 'unknown';
         }
         return 'unknown';
     }
-
-    protected async setInvitedBy(member: ExtendedGuildMember, inviter: inviterType): Promise<inviterType> {
+    async setInvitedBy(member, inviter) {
         return db.set(`${this.prefix}invitedBy_${member.guild.id}_${member.id}`, inviter);
     }
-
-    protected async addInvites(member: GuildMember, invitesUsers: IInvites): Promise<IInvites> {
-        const old_invitesUsers = await this.getInvitesUsers(member) || DefaultInvites as IInvites;
-        const new_invitesUsers: IInvites = {
+    async addInvites(member, invitesUsers) {
+        const old_invitesUsers = await this.getInvitesUsers(member) || DefaultInvites;
+        const new_invitesUsers = {
             regular: [...old_invitesUsers.regular, ...invitesUsers.regular],
             bonus: old_invitesUsers.bonus + invitesUsers.bonus,
             fake: [...old_invitesUsers.fake, ...invitesUsers.fake],
@@ -200,46 +173,50 @@ export class InviteManager extends EventEmitter {
         };
         return this.setInvites(member, new_invitesUsers);
     }
-
     // edit user invites type (regular, bonus, fake, leave)
-    protected async editInvitesUsers(member: GuildMember, invite: string, type: InviteType, action: 'add' | 'remove' | 'move'): Promise<IInvites> {
+    async editInvitesUsers(member, invite, type, action) {
         // get invites users
-        const invitesUsers = await this.getInvitesUsers(member) || DefaultInvites as IInvites;
-        
+        const invitesUsers = await this.getInvitesUsers(member) || DefaultInvites;
         switch (action) {
             case 'add':
                 // check if is a bonus invite
-                if (type === InviteType.bonus) {
+                if (type === types_1.InviteType.bonus) {
                     // add to bonus
                     invitesUsers[type] += 1;
                     break;
-                } else {
+                }
+                else {
                     // add to type
                     invitesUsers[type].push(invite);
                     break;
                 }
             case 'remove':
                 // check if is a bonus invite
-                if (type === InviteType.bonus) {
+                if (type === types_1.InviteType.bonus) {
                     // remove from bonus
                     invitesUsers[type] -= 1;
                     break;
-                } else {
+                }
+                else {
                     // remove from type
                     const index = invitesUsers[type].indexOf(invite);
-                    if (index === -1) return invitesUsers;
+                    if (index === -1)
+                        return invitesUsers;
                     invitesUsers[type].splice(index, 1);
                     break;
                 }
             case 'move':
-                if (type === InviteType.bonus) return invitesUsers;
+                if (type === types_1.InviteType.bonus)
+                    return invitesUsers;
                 // remove from other types
                 for (const key in invitesUsers) {
-                    if (key === type) continue;
-                    const invites = invitesUsers[key as keyof IInvites];
+                    if (key === type)
+                        continue;
+                    const invites = invitesUsers[key];
                     if (Array.isArray(invites)) {
                         const index = invites.indexOf(invite);
-                        if (index === -1) continue;
+                        if (index === -1)
+                            continue;
                         invites.splice(index, 1);
                     }
                 }
@@ -252,69 +229,54 @@ export class InviteManager extends EventEmitter {
         // save
         return this.setInvites(member, invitesUsers);
     }
-
-    protected async addInvite(member: GuildMember, inviter: User | 'vanity'): Promise<ExtendedGuildMember> {
+    async addInvite(member, inviter) {
         // get invites users
-        const invitesUsers = await this.getInvitesUsers(member) || DefaultInvites as IInvites;
-
-        const newMember = member as ExtendedGuildMember;
+        const invitesUsers = await this.getInvitesUsers(member) || DefaultInvites;
+        const newMember = member;
         // set invitedBy
         newMember.invitedBy = inviter === 'vanity' ? 'vanity' : inviter;
         // save
         await this.setInvitedBy(newMember, inviter);
-
         // check if invite is vanity invite
         if (inviter === 'vanity') {
             // save
             await this.setInvites(newMember, invitesUsers);
-        } else { // if not
+        }
+        else { // if not
             // move invite to regular invites
-            await this.editInvitesUsers(newMember, inviter.id, InviteType.regular, 'move');
-
+            await this.editInvitesUsers(newMember, inviter.id, types_1.InviteType.regular, 'move');
         }
-
         return newMember;
     }
-
-    protected async removeInvite(member: GuildMember): Promise<ExtendedGuildMember> {
-        // get invites users
-        const invitesUsers = await this.getInvitesUsers(member) || DefaultInvites as IInvites;
-
-        const newMember = member as ExtendedGuildMember;
+    async removeInvite(member) {
+        const newMember = member;
         // get invitedBy
         const inviter = await this.getInvitedBy(newMember);
-
         // check if invite is vanity invite
         if (inviter != 'vanity' && inviter != 'unknown') {
-            await this.editInvitesUsers(newMember, inviter.id, InviteType.leave, 'move');
+            await this.editInvitesUsers(newMember, inviter.id, types_1.InviteType.leave, 'move');
         }
-        
         return newMember;
     }
-
-    protected async clearInvites(member: GuildMember): Promise<ExtendedGuildMember> {
-        
-        const newMember = member as ExtendedGuildMember;
+    async clearInvites(member) {
+        const newMember = member;
         // get invitedBy
         const inviter = await this.getInvitedBy(newMember);
-
         // check if invite is vanity invite
         if (inviter != 'vanity' && inviter != 'unknown') {
-            await this.editInvitesUsers(newMember, inviter.id, InviteType.regular, 'remove');
-            await this.editInvitesUsers(newMember, inviter.id, InviteType.bonus, 'remove');
-            await this.editInvitesUsers(newMember, inviter.id, InviteType.fake, 'remove');
-            await this.editInvitesUsers(newMember, inviter.id, InviteType.leave, 'remove');
+            await this.editInvitesUsers(newMember, inviter.id, types_1.InviteType.regular, 'remove');
+            await this.editInvitesUsers(newMember, inviter.id, types_1.InviteType.bonus, 'remove');
+            await this.editInvitesUsers(newMember, inviter.id, types_1.InviteType.fake, 'remove');
+            await this.editInvitesUsers(newMember, inviter.id, types_1.InviteType.leave, 'remove');
         }
-        
         return newMember;
     }
-
-    public async addBonusInvite(member: GuildMember, number: number): Promise<IInvites> {
-        return this.addInvites(member, { bonus: number } as IInvites);
+    async addBonusInvite(member, number) {
+        return this.addInvites(member, { bonus: number });
     }
-
-    public async removeBonusInvite(member: GuildMember, number: number): Promise<IInvites> {
-        return this.addInvites(member, { bonus: -number } as IInvites);
+    async removeBonusInvite(member, number) {
+        return this.addInvites(member, { bonus: -number });
     }
-
 }
+exports.InviteManager = InviteManager;
+//# sourceMappingURL=index.js.map
