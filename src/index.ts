@@ -129,7 +129,7 @@ export class InviteManager extends EventEmitter {
     private async fetchInvites(guild: Guild): Promise<Collection<string, number>> {
         // fetch invites*
         const invites = await guild.invites.fetch()
-        let guildInviteCount = {} as Collection<string, number>;
+        let guildInviteCount = new Collection<string, number>();
         // foreach invites add author id and uses to guildInviteCount
         invites.forEach((invite) => {
             const { inviter, uses } = invite;
