@@ -90,7 +90,12 @@ export class InviteManager extends EventEmitter {
             
         } else { // if invite not found, check vanity invite
             const vanityInviteBefore = this.vanityInvites;
-            const vanityInviteAfter = await guild.fetchVanityData() ? (await guild.fetchVanityData()).uses : 0;
+            let vanityInviteAfter = 0;
+            try {
+                vanityInviteAfter = await guild.fetchVanityData() ? (await guild.fetchVanityData()).uses : 0;
+            } catch (error) {
+                // error, the guild does not have vanity invite
+            }
             // if vanity invite uses is greater than before, set invite to vanity invite
             if (vanityInviteAfter > vanityInviteBefore) {
                 // add vanity invite to the user
